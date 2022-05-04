@@ -166,12 +166,172 @@ func TestHash_equal(t *testing.T) {
 				now.Minute(), now.Second(), now.Nanosecond(), now.Location()), // does not contain monotonic clock
 			true,
 		},
+		{
+			struct {
+				Foo time.Time
+			}{
+				Foo: now, // contains monotonic clock
+			},
+			struct {
+				Foo time.Time
+			}{
+				time.Date(now.Year(), now.Month(), now.Day(), now.Hour(),
+					now.Minute(), now.Second(), now.Nanosecond(), now.Location()), // does not contain monotonic clock
+			},
+			true,
+		},
 	}
 
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			t.Logf("Hashing: %#v", tc.One)
 			one, err := Hash(tc.One, testFormat, nil)
+			t.Logf("Result: %d", one)
+			if err != nil {
+				t.Fatalf("Failed to hash %#v: %s", tc.One, err)
+			}
+			t.Logf("Hashing: %#v", tc.Two)
+			two, err := Hash(tc.Two, testFormat, nil)
+			t.Logf("Result: %d", two)
+			if err != nil {
+				t.Fatalf("Failed to hash %#v: %s", tc.Two, err)
+			}
+
+			// Zero is always wrong
+			if one == 0 {
+				t.Fatalf("zero hash: %#v", tc.One)
+			}
+
+			// Compare
+			if (one == two) != tc.Match {
+				t.Fatalf("bad, expected: %#v\n\n%#v\n\n%#v", tc.Match, tc.One, tc.Two)
+			}
+		})
+	}
+}
+
+func TestHash_equalUseStringer(t *testing.T) {
+	type testFoo struct{ Name string }
+	type testBar struct{ Name string }
+
+	now := time.Now()
+
+	cases := []struct {
+		One, Two interface{}
+		Match    bool
+	}{
+		{
+			map[string]string{"foo": "bar"},
+			map[interface{}]string{"foo": "bar"},
+			true,
+		},
+
+		{
+			map[string]interface{}{"1": "1"},
+			map[string]interface{}{"1": "1", "2": "2"},
+			false,
+		},
+
+		{
+			struct{ Fname, Lname string }{"foo", "bar"},
+			struct{ Fname, Lname string }{"bar", "foo"},
+			false,
+		},
+
+		{
+			struct{ Lname, Fname string }{"foo", "bar"},
+			struct{ Fname, Lname string }{"foo", "bar"},
+			false,
+		},
+
+		{
+			struct{ Lname, Fname string }{"foo", "bar"},
+			struct{ Fname, Lname string }{"bar", "foo"},
+			false,
+		},
+
+		{
+			testFoo{"foo"},
+			testBar{"foo"},
+			false,
+		},
+
+		{
+			struct {
+				Foo        string
+				unexported string
+			}{
+				Foo:        "bar",
+				unexported: "baz",
+			},
+			struct {
+				Foo        string
+				unexported string
+			}{
+				Foo:        "bar",
+				unexported: "bang",
+			},
+			true,
+		},
+
+		{
+			struct {
+				testFoo
+				Foo string
+			}{
+				Foo:     "bar",
+				testFoo: testFoo{Name: "baz"},
+			},
+			struct {
+				testFoo
+				Foo string
+			}{
+				Foo: "bar",
+			},
+			true,
+		},
+
+		{
+			struct {
+				Foo string
+			}{
+				Foo: "bar",
+			},
+			struct {
+				testFoo
+				Foo string
+			}{
+				Foo: "bar",
+			},
+			true,
+		},
+		{
+			now, // contains monotonic clock
+			time.Date(now.Year(), now.Month(), now.Day(), now.Hour(),
+				now.Minute(), now.Second(), now.Nanosecond(), now.Location()), // does not contain monotonic clock
+			true,
+		},
+		{
+			struct {
+				Foo time.Time
+			}{
+				Foo: now, // contains monotonic clock
+			},
+			struct {
+				Foo time.Time
+			}{
+				time.Date(now.Year(), now.Month(), now.Day(), now.Hour(),
+					now.Minute(), now.Second(), now.Nanosecond(), now.Location()), // does not contain monotonic clock
+			},
+			true,
+		},
+	}
+
+	options := HashOptions{UseStringer: true}
+	for i, tc := range cases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			t.Logf("Hashing: %#v", tc.One)
+			one, err := Hash(tc.One, testFormat, &options)
 			t.Logf("Result: %d", one)
 			if err != nil {
 				t.Fatalf("Failed to hash %#v: %s", tc.One, err)

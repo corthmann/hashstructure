@@ -329,7 +329,11 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 				}
 
 				// if string is set, use the string value
-				if tag == "string" || w.stringer {
+				switch {
+				case w.stringer && innerV.Type() == timeType:
+					// We treat the timeType as a binary to ensure the hash with be identical regardless of
+					// if the time contains a monotonic clock or not.
+				case w.stringer || tag == "string":
 					if impl, ok := innerV.Interface().(fmt.Stringer); ok {
 						innerV = reflect.ValueOf(impl.String())
 					} else if tag == "string" {
